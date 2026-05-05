@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Simple Camera App PWA</title>
+  
+  <!-- PWA Manifest & Theme -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#2563eb">
+  <link rel="apple-touch-icon" href="icon-192.png">
+
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #f4f4f4;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      margin: 0;
+    }
+
+    .container {
+      background: white;
+      padding: 20px;
+      border-radius: 16px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      text-align: center;
+      width: 90%;
+      max-width: 500px;
+    }
+
+    video, canvas {
+      width: 100%;
+      border-radius: 12px;
+      background: black;
+    }
+
+    .input-group {
+      margin-top: 16px;
+      margin-bottom: 8px;
+    }
+
+    input[type="text"] {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid #ccc;
+      border-radius: 10px;
+      font-size: 16px;
+      box-sizing: border-box;
+    }
+
+    input[type="text"]:focus {
+      outline: none;
+      border-color: #2563eb;
+      box-shadow: 0 0 5px rgba(37, 99, 235, 0.3);
+    }
+
+    .buttons {
+      margin-top: 16px;
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    button, a {
+      padding: 12px 18px;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 16px;
+      text-decoration: none;
+      color: white;
+      transition: 0.2s;
+      flex-grow: 1; /* Biar tombol melebar merata di HP */
+    }
+
+    button:hover, a:hover {
+      opacity: 0.9;
+    }
+
+    .start-btn { background: #2563eb; }
+    .capture-btn { background: #16a34a; }
+    /* CSS BARU untuk Tombol Putar */
+    .switch-btn { background: #6b7280; } 
+    .download-btn { background: #ea580c; display: none; margin-top: 10px;}
+
+    h1 { margin-bottom: 16px; margin-top: 0; font-size: 24px;}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Camera App</h1>
+
+    <video id="video" autoplay playsinline></video>
+    <canvas id="canvas" style="display:none;"></canvas>
+
+    <div class="input-group">
+      <input type="text" id="fileNameInput" placeholder="Masukkan nama file foto...">
+    </div>
+
+    <div class="buttons">
+      <!-- Ubah panggilannya agar menggunakan parameter mode -->
+      <button class="start-btn" onclick="startInitialCamera()">Start Camera</button>
+      <button class="capture-btn" onclick="capturePhoto()">Capture Photo</button>
+      <!-- TOMBOL BARU -->
+      <button class="switch-btn" onclick="switchCamera()">🔄 Putar Kamera</button>
+      <a id="downloadLink" class="download-btn">Download Photo</a>
+    </div>
+  </div>
+
+  <script>
+    // --- Registrasi Service Worker ---
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js')
+          .then(reg => console.log('SW Registered'))
+          .catch(err => console.log('SW Registration Failed', err));
+      });
+    }
+
+    // --- Logika Kamera ---
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const downloadLink = document.getElementById('downloadLink');
+    const fileNameInput = document.getElementById('fileNameInput');
+
+    // Variabel state global baru
+    let currentStream = null;
+    let currentFacingMode = 'environment'; // default kamera belakang
+
+    // Fungsi pembantu untuk tombol Start awal
+    async function startInitialCamera() {
+        await startCamera(currentFacingMode);
+    }
+
+    // Fungsi Utama Kamera yang Dimodifikasi
+    async function startCamera(mode) {
+      try {
+        // PENTING: Hentikan kamera yang sedang berjalan sebelumnya
+        if (currentStream) {
+          currentStream.getTracks().forEach(track => track.stop());
+        }
+
+        const constraints = {
+          video: { facingMode: mode },
+          audio: false
+        };
+
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        currentStream = stream; // simpan di state global
+        video.srcObject = stream;
+        
+        // Atur agar atribut 'download' tidak muncul dulu saat switch
+        downloadLink.style.display = 'none'; 
+
+      } catch (error) {
+        alert('Tidak dapat mengakses kamera: ' + error.message);
+      }
+    }
+
+    // FUNGSI BARU LOGIKA PUTAR KAMERA
+    function switchCamera() {
+      if (!currentStream) {
+        alert('Silakan tekan "Start Camera" terlebih dahulu.');
+        return;
+      }
+      
+      // Ganti mode: dari depan ke belakang, atau sebaliknya
+      currentFacingMode = (currentFacingMode === 'environment') ? 'user' : 'environment';
+      
+      // Jalankan ulang kamera dengan mode baru
+      startCamera(currentFacingMode);
+    }
+
+    // --- Logika Ambil & Download Foto (tetap sama) ---
+    function capturePhoto() {
+      if (!currentStream) {
+          alert('Kamera belum dinyalakan!');
+          return;
+      }
+      const context = canvas.getContext('2d');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      const imageData = canvas.toDataURL('image/jpeg', 0.9);
+
+      let fileName = fileNameInput.value.trim();
+      if (fileName === '') {
+        fileName = 'photo';
+      }
+
+      downloadLink.href = imageData;
+      downloadLink.download = fileName + '.jpg';
+      downloadLink.style.display = 'inline-block';
+      downloadLink.textContent = 'Download ' + fileName + '.jpg';
+    }
+  </script>
+</body>
+</html>
