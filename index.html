@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Simple Camera App PWA</title>
   
-  <!-- PWA Manifest & Theme -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#2563eb">
   <link rel="apple-touch-icon" href="icon-192.png">
@@ -49,6 +48,7 @@
       border-radius: 10px;
       font-size: 16px;
       box-sizing: border-box;
+      text-transform: uppercase; /* Memaksa nama jadi huruf besar semua */
     }
 
     input[type="text"]:focus {
@@ -74,7 +74,7 @@
       text-decoration: none;
       color: white;
       transition: 0.2s;
-      flex-grow: 1; /* Biar tombol melebar merata di HP */
+      flex-grow: 1; 
     }
 
     button:hover, a:hover {
@@ -83,7 +83,6 @@
 
     .start-btn { background: #2563eb; }
     .capture-btn { background: #16a34a; }
-    /* CSS BARU untuk Tombol Putar */
     .switch-btn { background: #6b7280; } 
     .download-btn { background: #ea580c; display: none; margin-top: 10px;}
 
@@ -98,21 +97,19 @@
     <canvas id="canvas" style="display:none;"></canvas>
 
     <div class="input-group">
-      <input type="text" id="fileNameInput" placeholder="Masukkan nama file foto...">
+      <!-- Placeholder diubah agar memperjelas instruksi -->
+      <input type="text" id="fileNameInput" placeholder="Ketik nama Picker di sini...">
     </div>
 
     <div class="buttons">
-      <!-- Ubah panggilannya agar menggunakan parameter mode -->
       <button class="start-btn" onclick="startInitialCamera()">Start Camera</button>
       <button class="capture-btn" onclick="capturePhoto()">Capture Photo</button>
-      <!-- TOMBOL BARU -->
       <button class="switch-btn" onclick="switchCamera()">🔄 Putar Kamera</button>
       <a id="downloadLink" class="download-btn">Download Photo</a>
     </div>
   </div>
 
   <script>
-    // --- Registrasi Service Worker ---
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('sw.js')
@@ -121,25 +118,27 @@
       });
     }
 
-    // --- Logika Kamera ---
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas');
     const downloadLink = document.getElementById('downloadLink');
     const fileNameInput = document.getElementById('fileNameInput');
 
-    // Variabel state global baru
-    let currentStream = null;
-    let currentFacingMode = 'environment'; // default kamera belakang
+    // === LOGIKA PENYIMPANAN OFFLINE (LOCALSTORAGE) ===
+    // Saat aplikasi baru dibuka, otomatis isi kolom nama dengan nama terakhir yang tersimpan di HP
+    const savedPickerName = localStorage.getItem('pickerName');
+    if (savedPickerName) {
+      fileNameInput.value = savedPickerName;
+    }
 
-    // Fungsi pembantu untuk tombol Start awal
+    let currentStream = null;
+    let currentFacingMode = 'environment'; 
+
     async function startInitialCamera() {
         await startCamera(currentFacingMode);
     }
 
-    // Fungsi Utama Kamera yang Dimodifikasi
     async function startCamera(mode) {
       try {
-        // PENTING: Hentikan kamera yang sedang berjalan sebelumnya
         if (currentStream) {
           currentStream.getTracks().forEach(track => track.stop());
         }
@@ -150,32 +149,23 @@
         };
 
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
-        currentStream = stream; // simpan di state global
+        currentStream = stream; 
         video.srcObject = stream;
-        
-        // Atur agar atribut 'download' tidak muncul dulu saat switch
         downloadLink.style.display = 'none'; 
-
       } catch (error) {
         alert('Tidak dapat mengakses kamera: ' + error.message);
       }
     }
 
-    // FUNGSI BARU LOGIKA PUTAR KAMERA
     function switchCamera() {
       if (!currentStream) {
         alert('Silakan tekan "Start Camera" terlebih dahulu.');
         return;
       }
-      
-      // Ganti mode: dari depan ke belakang, atau sebaliknya
       currentFacingMode = (currentFacingMode === 'environment') ? 'user' : 'environment';
-      
-      // Jalankan ulang kamera dengan mode baru
       startCamera(currentFacingMode);
     }
 
-    // --- Logika Ambil & Download Foto (tetap sama) ---
     function capturePhoto() {
       if (!currentStream) {
           alert('Kamera belum dinyalakan!');
@@ -185,18 +175,35 @@
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       context.drawImage(video, 0, 0, canvas.width, canvas.height);
-
       const imageData = canvas.toDataURL('image/jpeg', 0.9);
 
-      let fileName = fileNameInput.value.trim();
-      if (fileName === '') {
-        fileName = 'photo';
+      // Ambil nama dari inputan dan bersihkan spasi
+      let pickerName = fileNameInput.value.trim().toUpperCase();
+      if (pickerName === '') {
+        pickerName = 'PICKER';
       }
 
+      // === LOGIKA PENOMORAN NAMA FILE ===
+      const lastSavedName = localStorage.getItem('pickerName');
+      let currentCounter = parseInt(localStorage.getItem('photoCounter') || '1');
+
+      // Jika nama yang diketik BERBEDA dengan nama sebelumnya, reset nomor kembali ke 1
+      if (pickerName !== lastSavedName) {
+        currentCounter = 1;
+        // Simpan nama baru ke memori HP
+        localStorage.setItem('pickerName', pickerName);
+      }
+
+      // Gabungkan Nama dan Nomor (Contoh: ASEP_1)
+      const finalFileName = pickerName + '_' + currentCounter;
+
+      // Naikkan nomor untuk jepretan selanjutnya (1 jadi 2, 2 jadi 3) dan simpan ke memori
+      localStorage.setItem('photoCounter', currentCounter + 1);
+
       downloadLink.href = imageData;
-      downloadLink.download = fileName + '.jpg';
+      downloadLink.download = finalFileName + '.jpg';
       downloadLink.style.display = 'inline-block';
-      downloadLink.textContent = 'Download ' + fileName + '.jpg';
+      downloadLink.textContent = 'Download ' + finalFileName + '.jpg';
     }
   </script>
 </body>
