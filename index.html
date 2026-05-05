@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Simple Camera App PWA</title>
+  <title>Camera App PWA</title>
   
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#2563eb">
@@ -36,29 +36,52 @@
       background: black;
     }
 
-    .input-group {
+    /* --- DESAIN BARU UNTUK KOLOM INPUT --- */
+    .form-container {
       margin-top: 16px;
-      margin-bottom: 8px;
+      margin-bottom: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      background: #f9fafb;
+      padding: 15px;
+      border-radius: 12px;
+      border: 1px solid #e5e7eb;
     }
 
-    input[type="text"] {
-      width: 100%;
-      padding: 12px;
-      border: 1px solid #ccc;
-      border-radius: 10px;
-      font-size: 16px;
+    .input-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .input-row label {
+      font-weight: bold;
+      font-size: 14px;
+      color: #374151;
+      width: 60px; /* Lebar label dibuat seragam */
+      text-align: left;
+    }
+
+    .input-row input[type="text"] {
+      flex: 1;
+      padding: 10px 12px;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      font-size: 15px;
       box-sizing: border-box;
-      text-transform: uppercase; /* Memaksa nama jadi huruf besar semua */
+      text-transform: uppercase;
+      transition: all 0.2s;
     }
 
-    input[type="text"]:focus {
+    .input-row input[type="text"]:focus {
       outline: none;
       border-color: #2563eb;
-      box-shadow: 0 0 5px rgba(37, 99, 235, 0.3);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
     }
 
     .buttons {
-      margin-top: 16px;
+      margin-top: 10px;
       display: flex;
       gap: 10px;
       justify-content: center;
@@ -70,7 +93,8 @@
       border: none;
       border-radius: 10px;
       cursor: pointer;
-      font-size: 16px;
+      font-size: 15px;
+      font-weight: bold;
       text-decoration: none;
       color: white;
       transition: 0.2s;
@@ -79,14 +103,15 @@
 
     button:hover, a:hover {
       opacity: 0.9;
+      transform: translateY(-1px);
     }
 
     .start-btn { background: #2563eb; }
     .capture-btn { background: #16a34a; }
     .switch-btn { background: #6b7280; } 
-    .download-btn { background: #ea580c; display: none; margin-top: 10px;}
+    .download-btn { background: #ea580c; display: none; margin-top: 5px; width: 100%; box-sizing: border-box;}
 
-    h1 { margin-bottom: 16px; margin-top: 0; font-size: 24px;}
+    h1 { margin-bottom: 16px; margin-top: 0; font-size: 22px; color: #1f2937;}
   </style>
 </head>
 <body>
@@ -96,15 +121,22 @@
     <video id="video" autoplay playsinline></video>
     <canvas id="canvas" style="display:none;"></canvas>
 
-    <div class="input-group">
-      <!-- Placeholder diubah agar memperjelas instruksi -->
-      <input type="text" id="fileNameInput" placeholder="Ketik nama Picker di sini...">
+    <!-- KOLOM INPUT USER & NO SJ -->
+    <div class="form-container">
+      <div class="input-row">
+        <label for="userInput">USER</label>
+        <input type="text" id="userInput" placeholder="Nama Picker...">
+      </div>
+      <div class="input-row">
+        <label for="noSjInput">NO SJ</label>
+        <input type="text" id="noSjInput" placeholder="Nomor Surat Jalan...">
+      </div>
     </div>
 
     <div class="buttons">
       <button class="start-btn" onclick="startInitialCamera()">Start Camera</button>
       <button class="capture-btn" onclick="capturePhoto()">Capture Photo</button>
-      <button class="switch-btn" onclick="switchCamera()">🔄 Putar Kamera</button>
+      <button class="switch-btn" onclick="switchCamera()">🔄 Putar</button>
       <a id="downloadLink" class="download-btn">Download Photo</a>
     </div>
   </div>
@@ -121,13 +153,14 @@
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas');
     const downloadLink = document.getElementById('downloadLink');
-    const fileNameInput = document.getElementById('fileNameInput');
+    const userInput = document.getElementById('userInput');
+    const noSjInput = document.getElementById('noSjInput');
 
-    // === LOGIKA PENYIMPANAN OFFLINE (LOCALSTORAGE) ===
-    // Saat aplikasi baru dibuka, otomatis isi kolom nama dengan nama terakhir yang tersimpan di HP
-    const savedPickerName = localStorage.getItem('pickerName');
-    if (savedPickerName) {
-      fileNameInput.value = savedPickerName;
+    // === MEMORI OFFLINE UNTUK USER ===
+    // Saat aplikasi dibuka, langsung isi kolom USER dengan nama terakhir
+    const savedUser = localStorage.getItem('pickerUser');
+    if (savedUser) {
+      userInput.value = savedUser;
     }
 
     let currentStream = null;
@@ -142,12 +175,7 @@
         if (currentStream) {
           currentStream.getTracks().forEach(track => track.stop());
         }
-
-        const constraints = {
-          video: { facingMode: mode },
-          audio: false
-        };
-
+        const constraints = { video: { facingMode: mode }, audio: false };
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
         currentStream = stream; 
         video.srcObject = stream;
@@ -171,39 +199,29 @@
           alert('Kamera belum dinyalakan!');
           return;
       }
+      
       const context = canvas.getContext('2d');
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       context.drawImage(video, 0, 0, canvas.width, canvas.height);
       const imageData = canvas.toDataURL('image/jpeg', 0.9);
 
-      // Ambil nama dari inputan dan bersihkan spasi
-      let pickerName = fileNameInput.value.trim().toUpperCase();
-      if (pickerName === '') {
-        pickerName = 'PICKER';
-      }
+      // 1. Ambil & Simpan Data USER (Permanen/Statis)
+      let userVal = userInput.value.trim().toUpperCase();
+      if (userVal === '') userVal = 'USER';
+      localStorage.setItem('pickerUser', userVal); // Simpan ke memori HP
 
-      // === LOGIKA PENOMORAN NAMA FILE ===
-      const lastSavedName = localStorage.getItem('pickerName');
-      let currentCounter = parseInt(localStorage.getItem('photoCounter') || '1');
+      // 2. Ambil Data NO SJ (Dinamis / Tidak Disimpan ke memori HP)
+      let sjVal = noSjInput.value.trim().toUpperCase();
+      if (sjVal === '') sjVal = 'NOSJ';
 
-      // Jika nama yang diketik BERBEDA dengan nama sebelumnya, reset nomor kembali ke 1
-      if (pickerName !== lastSavedName) {
-        currentCounter = 1;
-        // Simpan nama baru ke memori HP
-        localStorage.setItem('pickerName', pickerName);
-      }
-
-      // Gabungkan Nama dan Nomor (Contoh: ASEP_1)
-      const finalFileName = pickerName + '_' + currentCounter;
-
-      // Naikkan nomor untuk jepretan selanjutnya (1 jadi 2, 2 jadi 3) dan simpan ke memori
-      localStorage.setItem('photoCounter', currentCounter + 1);
+      // 3. Gabungkan Menjadi Nama File
+      const finalFileName = userVal + '_' + sjVal;
 
       downloadLink.href = imageData;
       downloadLink.download = finalFileName + '.jpg';
       downloadLink.style.display = 'inline-block';
-      downloadLink.textContent = 'Download ' + finalFileName + '.jpg';
+      downloadLink.textContent = 'Simpan: ' + finalFileName + '.jpg';
     }
   </script>
 </body>
