@@ -1,4 +1,4 @@
-const CACHE_NAME = 'camera-app-cache-v4'; // Naikkan versinya ke v4
+const CACHE_NAME = 'camera-app-cache-v5'; // Ubah angka ini ke versi terbaru
 const urlsToCache = [
   './',               // Tambahkan titik di sini
   './index.html',     // Tambahkan titik di sini
