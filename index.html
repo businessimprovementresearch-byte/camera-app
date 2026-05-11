@@ -296,11 +296,15 @@
       canvas.width  = video.videoWidth;
       canvas.height = video.videoHeight;
       context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      // Jeda kecil khusus HP agar canvas selesai render sebelum toDataURL
+      await new Promise(resolve => setTimeout(resolve, 150));
+
       const imageData = canvas.toDataURL('image/jpeg', 0.6);
 
       // Tombol download sebagai backup offline
-      downloadLink.href      = imageData;
-      downloadLink.download  = finalFileName;
+      downloadLink.href          = imageData;
+      downloadLink.download      = finalFileName;
       downloadLink.style.display = 'inline-block';
       downloadLink.textContent   = '💾 Simpan Lokal: ' + finalFileName;
 
@@ -314,9 +318,6 @@
       uploadStatus.textContent = '⏳ Mengupload ke Google Drive...';
 
       try {
-        // Gunakan no-cors agar tidak diblokir browser
-        // Konsekuensi: response tidak bisa dibaca (opaque response)
-        // Jika fetch tidak throw error = request berhasil terkirim ke server
         await fetch(APPS_SCRIPT_URL, {
           method: 'POST',
           mode: 'no-cors',
@@ -329,7 +330,6 @@
         showToast('✅ Foto tersimpan di Drive!');
 
       } catch (err) {
-        // Hanya masuk sini jika benar-benar gagal kirim (misal offline)
         uploadStatus.className   = 'error';
         uploadStatus.textContent = '❌ Gagal upload: ' + err.message + ' — Foto tetap bisa diunduh secara lokal.';
         showToast('❌ Gagal upload ke Drive', true);
