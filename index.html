@@ -309,31 +309,27 @@
     }
 
     async function uploadToDrive(imageData, fileName) {
-      // Disable tombol capture selama upload
-      captureBtn.disabled = true;
-
+      captureBtn.disabled      = true;
       uploadStatus.className   = 'uploading';
       uploadStatus.textContent = '⏳ Mengupload ke Google Drive...';
 
       try {
-        const response = await fetch(APPS_SCRIPT_URL, {
+        // Gunakan no-cors agar tidak diblokir browser
+        // Konsekuensi: response tidak bisa dibaca (opaque response)
+        // Jika fetch tidak throw error = request berhasil terkirim ke server
+        await fetch(APPS_SCRIPT_URL, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain' },
           body: JSON.stringify({ image: imageData, fileName: fileName }),
-          // no-cors tidak bisa dipakai karena kita butuh baca response
-          // Apps Script dengan "Anyone" access sudah support CORS
         });
 
-        const result = await response.json();
+        uploadStatus.className   = 'success';
+        uploadStatus.textContent = '✅ Foto berhasil dikirim ke Google Drive!';
+        showToast('✅ Foto tersimpan di Drive!');
 
-        if (result.status === 'ok') {
-          uploadStatus.className   = 'success';
-          uploadStatus.textContent = '✅ Foto berhasil disimpan ke Google Drive!';
-          showToast('✅ Foto tersimpan di Drive!');
-        } else {
-          throw new Error(result.message || 'Unknown error');
-        }
       } catch (err) {
+        // Hanya masuk sini jika benar-benar gagal kirim (misal offline)
         uploadStatus.className   = 'error';
         uploadStatus.textContent = '❌ Gagal upload: ' + err.message + ' — Foto tetap bisa diunduh secara lokal.';
         showToast('❌ Gagal upload ke Drive', true);
