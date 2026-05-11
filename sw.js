@@ -1,11 +1,9 @@
-const CACHE_NAME = 'camera-app-cache-v6'; // Ubah nomor versinya (misal jadi v6)
+const CACHE_NAME = 'camera-app-cache-v7'; // Ubah nomor versinya (misal jadi v6)
 const urlsToCache = [
   './',               // Tambahkan titik di sini
   './index.html',     // Tambahkan titik di sini
   './manifest.json'   // Tambahkan titik di sini
 ];
-
-// ... (sisa kode sw.js di bawahnya tetap sama persis seperti sebelumnya) ...
 
 self.addEventListener('install', event => {
   // Langsung paksa SW baru aktif tanpa menunggu tab ditutup
