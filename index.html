@@ -36,7 +36,6 @@
       background: black;
     }
 
-    /* --- DESAIN BARU UNTUK KOLOM INPUT --- */
     .form-container {
       margin-top: 16px;
       margin-bottom: 12px;
@@ -59,7 +58,7 @@
       font-weight: bold;
       font-size: 14px;
       color: #374151;
-      width: 60px; /* Lebar label dibuat seragam */
+      width: 60px;
       text-align: left;
     }
 
@@ -98,7 +97,7 @@
       text-decoration: none;
       color: white;
       transition: 0.2s;
-      flex-grow: 1; 
+      flex-grow: 1;
     }
 
     button:hover, a:hover {
@@ -106,12 +105,78 @@
       transform: translateY(-1px);
     }
 
-    .start-btn { background: #2563eb; }
-    .capture-btn { background: #16a34a; }
-    .switch-btn { background: #6b7280; } 
-    .download-btn { background: #ea580c; display: none; margin-top: 5px; width: 100%; box-sizing: border-box;}
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
 
-    h1 { margin-bottom: 16px; margin-top: 0; font-size: 22px; color: #1f2937;}
+    .start-btn   { background: #2563eb; }
+    .capture-btn { background: #16a34a; }
+    .switch-btn  { background: #6b7280; }
+    .download-btn {
+      background: #ea580c;
+      display: none;
+      margin-top: 5px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    h1 { margin-bottom: 16px; margin-top: 0; font-size: 22px; color: #1f2937; }
+
+    /* Status upload */
+    #uploadStatus {
+      margin-top: 12px;
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: bold;
+      display: none;
+    }
+    #uploadStatus.uploading {
+      background: #eff6ff;
+      color: #1d4ed8;
+      border: 1px solid #bfdbfe;
+      display: block;
+    }
+    #uploadStatus.success {
+      background: #f0fdf4;
+      color: #15803d;
+      border: 1px solid #bbf7d0;
+      display: block;
+    }
+    #uploadStatus.error {
+      background: #fef2f2;
+      color: #b91c1c;
+      border: 1px solid #fecaca;
+      display: block;
+    }
+
+    /* Toast Notification */
+    #toast {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: #15803d;
+      color: white;
+      padding: 12px 24px;
+      border-radius: 30px;
+      font-size: 15px;
+      font-weight: bold;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+      opacity: 0;
+      transition: all 0.4s ease;
+      z-index: 9999;
+      white-space: nowrap;
+    }
+    #toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+    #toast.error {
+      background: #b91c1c;
+    }
   </style>
 </head>
 <body>
@@ -121,7 +186,6 @@
     <video id="video" autoplay playsinline></video>
     <canvas id="canvas" style="display:none;"></canvas>
 
-    <!-- KOLOM INPUT USER & NO SJ -->
     <div class="form-container">
       <div class="input-row">
         <label for="userInput">USER</label>
@@ -135,13 +199,27 @@
 
     <div class="buttons">
       <button class="start-btn" onclick="startInitialCamera()">Start Camera</button>
-      <button class="capture-btn" onclick="capturePhoto()">Capture Photo</button>
+      <button class="capture-btn" id="captureBtn" onclick="capturePhoto()">Capture Photo</button>
       <button class="switch-btn" onclick="switchCamera()">🔄 Putar</button>
       <a id="downloadLink" class="download-btn">Download Photo</a>
     </div>
+
+    <!-- Status Upload -->
+    <div id="uploadStatus"></div>
   </div>
 
+  <!-- Toast Notification -->
+  <div id="toast"></div>
+
   <script>
+    // =============================================
+    // CONFIG — ganti URL ini jika deploy ulang
+    // =============================================
+    const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyUjqvo4O5LcwiiyGusawthzc6JmwScvPgsMXa2NPExsHL-y0eO9NXgd7Hi9Zi45zRFlA/exec';
+
+    // =============================================
+    // Service Worker
+    // =============================================
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('sw.js')
@@ -150,78 +228,119 @@
       });
     }
 
-    const video = document.getElementById('video');
-    const canvas = document.getElementById('canvas');
+    const video        = document.getElementById('video');
+    const canvas       = document.getElementById('canvas');
     const downloadLink = document.getElementById('downloadLink');
-    const userInput = document.getElementById('userInput');
-    const noSjInput = document.getElementById('noSjInput');
+    const userInput    = document.getElementById('userInput');
+    const noSjInput    = document.getElementById('noSjInput');
+    const captureBtn   = document.getElementById('captureBtn');
+    const uploadStatus = document.getElementById('uploadStatus');
+    const toast        = document.getElementById('toast');
 
-    // === MEMORI OFFLINE UNTUK USER ===
-    // Saat aplikasi dibuka, langsung isi kolom USER dengan nama terakhir
-    const savedUser = localStorage.getItem('pickerUser');
-    if (savedUser) {
-      userInput.value = savedUser;
+    function showToast(message, isError = false) {
+      toast.textContent = message;
+      toast.className   = isError ? 'error' : '';
+      // Paksa reflow agar animasi bisa diulang
+      void toast.offsetWidth;
+      toast.classList.add('show');
+      setTimeout(() => { toast.classList.remove('show'); }, 3000);
     }
 
-    let currentStream = null;
-    let currentFacingMode = 'environment'; 
+    // Isi USER dari localStorage
+    const savedUser = localStorage.getItem('pickerUser');
+    if (savedUser) userInput.value = savedUser;
+
+    let currentStream      = null;
+    let currentFacingMode  = 'environment';
 
     async function startInitialCamera() {
-        await startCamera(currentFacingMode);
+      await startCamera(currentFacingMode);
     }
 
     async function startCamera(mode) {
       try {
-        if (currentStream) {
-          currentStream.getTracks().forEach(track => track.stop());
-        }
-        const constraints = { video: { facingMode: mode }, audio: false };
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
-        currentStream = stream; 
+        if (currentStream) currentStream.getTracks().forEach(t => t.stop());
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: mode }, audio: false });
+        currentStream  = stream;
         video.srcObject = stream;
-        downloadLink.style.display = 'none'; 
+        downloadLink.style.display = 'none';
+        uploadStatus.className = '';
+        uploadStatus.style.display = 'none';
       } catch (error) {
         alert('Tidak dapat mengakses kamera: ' + error.message);
       }
     }
 
     function switchCamera() {
-      if (!currentStream) {
-        alert('Silakan tekan "Start Camera" terlebih dahulu.');
-        return;
-      }
+      if (!currentStream) { alert('Silakan tekan "Start Camera" terlebih dahulu.'); return; }
       currentFacingMode = (currentFacingMode === 'environment') ? 'user' : 'environment';
       startCamera(currentFacingMode);
     }
 
-    function capturePhoto() {
-      if (!currentStream) {
-          alert('Kamera belum dinyalakan!');
-          return;
-      }
-      
-      const context = canvas.getContext('2d');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      context.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const imageData = canvas.toDataURL('image/jpeg', 0.9);
+    async function capturePhoto() {
+      if (!currentStream) { alert('Kamera belum dinyalakan!'); return; }
 
-      // 1. Ambil & Simpan Data USER (Permanen/Statis)
+      // Ambil & simpan USER
       let userVal = userInput.value.trim().toUpperCase();
       if (userVal === '') userVal = 'USER';
-      localStorage.setItem('pickerUser', userVal); // Simpan ke memori HP
+      localStorage.setItem('pickerUser', userVal);
 
-      // 2. Ambil Data NO SJ (Dinamis / Tidak Disimpan ke memori HP)
+      // Ambil NO SJ
       let sjVal = noSjInput.value.trim().toUpperCase();
       if (sjVal === '') sjVal = 'NOSJ';
 
-      // 3. Gabungkan Menjadi Nama File
-      const finalFileName = userVal + '_' + sjVal;
+      const finalFileName = userVal + '_' + sjVal + '.jpg';
 
-      downloadLink.href = imageData;
-      downloadLink.download = finalFileName + '.jpg';
+      // Gambar ke canvas — kualitas 0.6 (cukup terbaca, file lebih kecil)
+      const context = canvas.getContext('2d');
+      canvas.width  = video.videoWidth;
+      canvas.height = video.videoHeight;
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const imageData = canvas.toDataURL('image/jpeg', 0.6);
+
+      // Tombol download sebagai backup offline
+      downloadLink.href      = imageData;
+      downloadLink.download  = finalFileName;
       downloadLink.style.display = 'inline-block';
-      downloadLink.textContent = 'Simpan: ' + finalFileName + '.jpg';
+      downloadLink.textContent   = '💾 Simpan Lokal: ' + finalFileName;
+
+      // Upload ke Google Drive
+      await uploadToDrive(imageData, finalFileName);
+    }
+
+    async function uploadToDrive(imageData, fileName) {
+      // Disable tombol capture selama upload
+      captureBtn.disabled = true;
+
+      uploadStatus.className   = 'uploading';
+      uploadStatus.textContent = '⏳ Mengupload ke Google Drive...';
+
+      try {
+        const response = await fetch(APPS_SCRIPT_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image: imageData, fileName: fileName }),
+          // no-cors tidak bisa dipakai karena kita butuh baca response
+          // Apps Script dengan "Anyone" access sudah support CORS
+        });
+
+        const result = await response.json();
+
+        if (result.status === 'ok') {
+          uploadStatus.className   = 'success';
+          uploadStatus.textContent = '✅ Foto berhasil disimpan ke Google Drive!';
+          showToast('✅ Foto tersimpan di Drive!');
+        } else {
+          throw new Error(result.message || 'Unknown error');
+        }
+      } catch (err) {
+        uploadStatus.className   = 'error';
+        uploadStatus.textContent = '❌ Gagal upload: ' + err.message + ' — Foto tetap bisa diunduh secara lokal.';
+        showToast('❌ Gagal upload ke Drive', true);
+        console.error('Upload error:', err);
+      } finally {
+        captureBtn.disabled = false;
+      }
     }
   </script>
 </body>
